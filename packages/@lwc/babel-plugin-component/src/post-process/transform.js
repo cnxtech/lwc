@@ -70,10 +70,17 @@ module.exports = function postProcess({ types: t }) {
             }
         }
 
-        return t.callExpression(id, [
-            node,
-            t.objectExpression([t.objectProperty(t.identifier('tmpl'), templateIdentifier)]),
-        ]);
+        const metaProperties = [t.objectProperty(t.identifier('tmpl'), templateIdentifier)];
+        if (state.nonDecoratedFields.length) {
+            metaProperties.push(
+                t.objectProperty(
+                    t.identifier('observedFields'),
+                    t.valueToNode(state.nonDecoratedFields)
+                )
+            );
+        }
+
+        return t.callExpression(id, [node, t.objectExpression(metaProperties)]);
     }
 
     function needsComponentRegistration(path) {
@@ -93,6 +100,15 @@ module.exports = function postProcess({ types: t }) {
             if (implicitResolution) {
                 const declaration = path.get('declaration');
                 if (needsComponentRegistration(declaration)) {
+                    state.nonDecoratedFields = declaration
+                        .get('body.body')
+                        .filter(
+                            path =>
+                                t.isClassProperty(path.node) &&
+                                !isLWCNode(path.node) &&
+                                !(state.decoratedIdentifiers.indexOf(path.node.key.name) >= 0)
+                        )
+                        .map(path => path.node.key.name);
                     declaration.replaceWith(createRegisterComponent(declaration, state));
                 }
             }

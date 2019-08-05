@@ -170,6 +170,9 @@ function decorators({ types: t }) {
 
             state.decorators = decorators;
             state.decoratorImportSpecifiers = decoratorImportSpecifiers;
+            state.decoratedIdentifiers = decorators.map(
+                ({ path }) => path.parentPath.get('key.name').node
+            );
         },
 
         Class(path, state) {

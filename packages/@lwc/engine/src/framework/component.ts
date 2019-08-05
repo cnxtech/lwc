@@ -12,13 +12,20 @@ import {
     vmBeingRendered,
     invokeEventListener,
 } from './invoker';
-import { isArray, isFunction, isUndefined, StringToLowerCase, isFalse } from '../shared/language';
+import {
+    isArray,
+    isFunction,
+    isUndefined,
+    StringToLowerCase,
+    isFalse,
+    defineProperty,
+} from '../shared/language';
 import { invokeServiceHook, Services } from './services';
 import { VM, getComponentVM, UninitializedVM, scheduleRehydration } from './vm';
 import { VNodes } from '../3rdparty/snabbdom/types';
 import { tagNameGetter } from '../env/element';
 import { Template } from './template';
-import { ReactiveObserver } from '../libs/mutation-tracker';
+import { ReactiveObserver, valueMutated, valueObserved } from '../libs/mutation-tracker';
 import { LightningElementConstructor } from './base-lightning-element';
 
 export type ErrorCallback = (error: any, stack: string) => void;
@@ -36,9 +43,53 @@ export interface ComponentConstructor extends LightningElementConstructor {
 export interface ComponentMeta {
     readonly name: string;
     readonly template?: Template;
+    readonly observedFields?: string[];
 }
 
 const signedComponentToMetaMap: Map<ComponentConstructor, ComponentMeta> = new Map();
+
+function createObservedPropertyDescriptor(Ctor: any, key: PropertyKey): PropertyDescriptor {
+    return {
+        get(this: ComponentInterface): any {
+            const vm = getComponentVM(this);
+            if (process.env.NODE_ENV !== 'production') {
+                assert.isTrue(vm && 'cmpRoot' in vm, `${vm} is not a valid vm.`);
+            }
+            valueObserved(this, key);
+            return vm.cmpFields[key];
+        },
+        set(this: ComponentInterface, newValue: any) {
+            const vm = getComponentVM(this);
+            if (process.env.NODE_ENV !== 'production') {
+                assert.isTrue(vm && 'cmpRoot' in vm, `${vm} is not a valid vm.`);
+                assert.invariant(
+                    !isRendering,
+                    `${vmBeingRendered}.render() method has side effects on the state of ${vm}.${String(
+                        key
+                    )}`
+                );
+            }
+
+            if (newValue !== vm.cmpFields[key]) {
+                vm.cmpFields[key] = newValue;
+                if (isFalse(vm.isDirty)) {
+                    valueMutated(this, key);
+                }
+            }
+        },
+        enumerable: true,
+        configurable: true,
+    };
+}
+
+function observeFields(Ctor: ComponentConstructor, fields: string[]): any {
+    const target = Ctor.prototype;
+    for (let i = 0, len = fields.length; i < len; i += 1) {
+        const fieldDescriptor = createObservedPropertyDescriptor(target, fields[i]);
+        defineProperty(target, fields[i], fieldDescriptor);
+    }
+    return Ctor;
+}
 
 /**
  * INTERNAL: This function can only be invoked by compiled code. The compiler
@@ -46,9 +97,17 @@ const signedComponentToMetaMap: Map<ComponentConstructor, ComponentMeta> = new M
  */
 export function registerComponent(
     Ctor: ComponentConstructor,
-    { name, tmpl: template }: { name: string; tmpl: Template }
+    {
+        name,
+        tmpl: template,
+        observedFields = [],
+    }: { name: string; tmpl: Template; observedFields?: string[] }
 ): ComponentConstructor {
-    signedComponentToMetaMap.set(Ctor, { name, template });
+    signedComponentToMetaMap.set(observeFields(Ctor, observedFields), {
+        name,
+        template,
+        observedFields,
+    });
     // chaining this method as a way to wrap existing
     // assignment of component constructor easily, without too much transformation
     return Ctor;

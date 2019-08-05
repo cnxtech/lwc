@@ -92,7 +92,8 @@ describe('Transform property', () => {
                 });
 
                 export default _registerComponent(Outer, {
-                  tmpl: _tmpl
+                  tmpl: _tmpl,
+                  observedFields: ["a"]
                 });
                 `,
             },
@@ -337,7 +338,8 @@ describe('Transform property', () => {
                 });
 
                 export default _registerComponent(Test, {
-                  tmpl: _tmpl
+                  tmpl: _tmpl,
+                  observedFields: ["_a", "_b"]
                 });
                 `,
             },
@@ -409,7 +411,8 @@ describe('Transform property', () => {
                 });
 
                 export default _registerComponent(Text, {
-                  tmpl: _tmpl
+                  tmpl: _tmpl,
+                  observedFields: ["privateProp", "ctor"]
                 });
                 `,
             },

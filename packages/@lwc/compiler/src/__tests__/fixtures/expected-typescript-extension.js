@@ -22,6 +22,7 @@ class ClassAndTemplate extends LightningElement {
     }
 }
 var typescript = registerComponent(ClassAndTemplate, {
-    tmpl: _tmpl
+    tmpl: _tmpl,
+    observedFields: ["t"]
 });
 export default typescript;
